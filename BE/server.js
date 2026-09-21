@@ -37,7 +37,7 @@ app.put('api/profile', (req,res) => {
 });
 
 const PORT = 5000;
-app.listen(PORT, () => console.log(`Backend chạy tại http://localhost:${PORT}`));
+app.listen(PORT)
 
 // MODULE: Quản lý ghi chú bình thường (public note)
 // Author: Nguyễn Ngọc Trọng
