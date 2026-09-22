@@ -48,7 +48,7 @@ app.listen(PORT)
 // FE: Các API này nhận và trả về dữ liệu chuẩn JSON (key:value). Không đc tự ý sửa key
 // BE: Nếu đổi đường dẫn, Phải báo PM
 
-const notesDir = path.join(__dirname,'data',notes);
+const notesDir = path.join(__dirname,'data','notes');
 // Nếu thư mục không tồn tại thì tự động tạo
 if (!fs.existsSync(notesDir))
 {
