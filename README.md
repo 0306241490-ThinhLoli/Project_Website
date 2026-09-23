@@ -2,9 +2,9 @@
 **Giảng viên hướng dẫn:** [Tên giảng viên]
 **Nhóm thực hiện:** Nhóm [Số nhóm]
 **Thành viên:**
-1. [Họ tên] - [Mã SV] - Vai trò: PM & QA
-2. [Họ tên] - [Mã SV] - Vai trò: Frontend Developer
-3. [Họ tên] - [Mã SV] - Vai trò: Backend Developer
+1. Hà Hữu Thịnh - 0306241490 -Vai trò: PM & QA
+2. Lê Đức Phong - 0306241471 - Vai trò: Frontend Developer
+3. Nguyễn Ngọc Trọng - 0306241500 - Vai trò: Backend Developer
 ## 1. Công nghệ sử dụng
 - **Frontend:** ReactJS (Vite), React Router DOM.
 - **Backend:** Node.js, Express.js.
