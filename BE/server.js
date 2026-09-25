@@ -170,3 +170,181 @@ app.post('/api/private/notes', (req, res) => {
         res.status(500).json({ message: "Lỗi thêm ghi chú kín" }); 
     } 
 }); 
+// GET - Lấy danh sách ghi chú
+// Hỗ trợ:
+// - Phân trang: ?page=1&limit=10
+// - Tìm kiếm: ?search=tu-khoa
+// - Tìm kiếm nâng cao: ?searchIn=title,content
+// - Lọc thời gian: ?dateType=day&date=2026-09-25
+//   dateType: day | month | year
+
+app.get('/api/notes/:topic', (req, res) => {
+    const filePath = getFilePath(req.params.topic);
+
+    try {
+        if (!fs.existsSync(filePath)) {
+            return res.json({
+                success: true,
+                data: [],
+                pagination: {
+                    page: 1,
+                    limit: 10,
+                    total: 0,
+                    totalPages: 0
+                }
+            });
+        }
+
+        const data = fs.readFileSync(filePath, 'utf-8');
+        let notes = JSON.parse(data);
+
+        // ========================================
+        // 1. TÌM KIẾM
+        // ========================================
+        const search = (req.query.search || '').trim().toLowerCase();
+
+        if (search) {
+            // Mặc định tìm theo tiêu đề
+            // Có thể tìm nâng cao:
+            // searchIn=title,content
+            const searchIn = (req.query.searchIn || 'title').toLowerCase();
+
+            const fields = searchIn
+                .split(',')
+                .map(field => field.trim());
+
+            notes = notes.filter(note => {
+                return fields.some(field => {
+                    const value = String(note[field] || '').toLowerCase();
+                    return value.includes(search);
+                });
+            });
+        }
+
+        // ========================================
+        // 2. LỌC THEO THỜI GIAN
+        // ========================================
+        const dateType = (req.query.dateType || '').toLowerCase();
+        const dateValue = (req.query.date || '').trim();
+
+        if (dateType && dateValue) {
+
+            if (!['day', 'month', 'year'].includes(dateType)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'dateType phải là day, month hoặc year'
+                });
+            }
+
+            notes = notes.filter(note => {
+
+                // Public note hiện tại sử dụng createAt
+                const createdAt = note.createAt || note.createdAt;
+
+                if (!createdAt) {
+                    return false;
+                }
+
+                const noteDate = new Date(createdAt);
+
+                if (Number.isNaN(noteDate.getTime())) {
+                    return false;
+                }
+
+                const year = noteDate.getFullYear();
+
+                const month = String(
+                    noteDate.getMonth() + 1
+                ).padStart(2, '0');
+
+                const day = String(
+                    noteDate.getDate()
+                ).padStart(2, '0');
+
+
+                // Lọc theo ngày
+                if (dateType === 'day') {
+                    return `${year}-${month}-${day}` === dateValue;
+                }
+
+
+                // Lọc theo tháng
+                if (dateType === 'month') {
+                    return `${year}-${month}` === dateValue;
+                }
+
+
+                // Lọc theo năm
+                if (dateType === 'year') {
+                    return String(year) === dateValue;
+                }
+
+                return false;
+            });
+        }
+
+        // ========================================
+        // 3. PHÂN TRANG
+        // ========================================
+
+        const total = notes.length;
+
+        let page = parseInt(req.query.page, 10);
+        let limit = parseInt(req.query.limit, 10);
+
+
+        // Giá trị mặc định
+        page = Number.isInteger(page) && page > 0
+            ? page
+            : 1;
+
+        limit = Number.isInteger(limit) && limit > 0
+            ? limit
+            : 10;
+
+
+        // Không cho lấy quá nhiều dữ liệu
+        if (limit > 100) {
+            limit = 100;
+        }
+
+
+        const totalPages = total === 0
+            ? 0
+            : Math.ceil(total / limit);
+
+
+        const startIndex = (page - 1) * limit;
+
+
+        const paginatedNotes = notes.slice(
+            startIndex,
+            startIndex + limit
+        );
+
+
+        // ========================================
+        // 4. RESPONSE
+        // ========================================
+
+        return res.json({
+            success: true,
+
+            data: paginatedNotes,
+
+            pagination: {
+                page: page,
+                limit: limit,
+                total: total,
+                totalPages: totalPages
+            }
+        });
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: 'Lỗi đọc danh sách ghi chú'
+        });
+
+    }
+});
