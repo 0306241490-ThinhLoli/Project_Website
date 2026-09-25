@@ -1,107 +1,132 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { AppContext } from './AppContext';
+import { useContext, useState } from 'react';
+import { AppContext } from './AppState';
 
-function Settings() {
-  const { profile, setProfile } = useContext(AppContext);
-  const [localProfile, setLocalProfile] = useState(profile);
-  const isDark = profile.theme === 'dark';
+const COLORS = ['#111827', '#475569', '#2563eb', '#7c3aed', '#db2777'];
 
-  useEffect(() => {
-    fetch('http://localhost:5000/api/profile')
-      .then(res => res.json())
-      .then(data => {
-        setLocalProfile(data);
-        setProfile(data);
-      })
-      .catch(err => console.log(err));
-  }, [setProfile]);
+function SettingsForm({ profile, setProfile }) {
+  const [formData, setFormData] = useState({
+    displayName: profile.displayName || '',
+    theme: profile.theme || 'light',
+    primaryColor: profile.primaryColor || '#111827',
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [message, setMessage] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  const handleChange = (e) => {
-    setLocalProfile({ ...localProfile, [e.target.name]: e.target.value });
-  };
+  function handleChange(event) {
+    setFormData({ ...formData, [event.target.name]: event.target.value });
+    setMessage('');
+  }
 
-  const handleThemeChange = (newTheme) => {
-    setLocalProfile({ ...localProfile, theme: newTheme });
-  };
+  async function handleSave(event) {
+    event.preventDefault();
+    const changingPassword = Boolean(formData.newPassword || formData.confirmPassword);
 
-  const handleSave = () => {
-    fetch('http://localhost:5000/api/profile', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(localProfile)
-    })
-    .then(res => res.json())
-    .then(() => {
-      alert("Lưu thành công!");
-      setProfile(localProfile);
-    })
-    .catch(err => {
-      alert("Lưu tạm thời (Frontend only)!");
-      setProfile(localProfile);
-    });
-  };
+    if (!formData.displayName.trim()) {
+      setMessage('Vui lòng nhập tên hiển thị.');
+      return;
+    }
+    if (changingPassword && profile.password && formData.currentPassword !== profile.password) {
+      setMessage('Mật khẩu hiện tại không đúng.');
+      return;
+    }
+    if (changingPassword && formData.newPassword !== formData.confirmPassword) {
+      setMessage('Mật khẩu xác nhận không khớp.');
+      return;
+    }
 
-  const inputStyle = {
-    width: '100%',
-    padding: '12px 15px',
-    borderRadius: '8px',
-    border: `1px solid ${isDark ? '#444' : '#ddd'}`,
-    backgroundColor: isDark ? '#222' : '#f9f9f9',
-    color: isDark ? '#fff' : '#000',
-    marginBottom: '10px',
-    boxSizing: 'border-box',
-    fontSize: '14px'
-  };
+    const updatedProfile = {
+      ...profile,
+      displayName: formData.displayName.trim(),
+      theme: formData.theme,
+      primaryColor: formData.primaryColor,
+      password: changingPassword ? formData.newPassword : profile.password,
+    };
 
-  const sectionLabelStyle = {
-    fontSize: '12px',
-    fontWeight: '900',
-    color: isDark ? '#ccc' : '#111',
-    letterSpacing: '1px',
-    marginBottom: '8px',
-    marginTop: '25px',
-    textTransform: 'uppercase'
-  };
+    setSaving(true);
+    setMessage('');
+    try {
+      const response = await fetch('http://localhost:5000/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedProfile),
+      });
+      if (!response.ok) throw new Error('Không thể lưu cài đặt.');
+
+      setProfile(updatedProfile);
+      setFormData((current) => ({
+        ...current,
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      }));
+      setMessage('Đã lưu thay đổi thành công.');
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
-    <div style={{ padding: '20px' }}>
-      <h2 style={{ textAlign: 'center', marginBottom: '30px', fontSize: '18px' }}>Settings</h2>
-      
-      <div style={sectionLabelStyle}>USER PROFILE</div>
-      <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }}>Display Name</label>
-      <input name="displayName" value={localProfile.displayName} onChange={handleChange} style={inputStyle} />
-      
-      <div style={sectionLabelStyle}>THEME SWATCHES</div>
-      <div style={{ display: 'flex', gap: '15px', marginBottom: '10px' }}>
-        <div 
-          onClick={() => handleThemeChange('light')}
-          style={{ width: '30px', height: '30px', borderRadius: '50%', backgroundColor: '#fff', border: localProfile.theme === 'light' ? '2px solid #007bff' : '2px solid #ddd', cursor: 'pointer' }}
-        ></div>
-        <div 
-          onClick={() => handleThemeChange('dark')}
-          style={{ width: '30px', height: '30px', borderRadius: '50%', backgroundColor: '#1a1a1a', border: localProfile.theme === 'dark' ? '2px solid #007bff' : '2px solid #555', cursor: 'pointer' }}
-        ></div>
-      </div>
+    <section className="page">
+      <header className="page-header"><h1>Settings</h1></header>
+      <form className="settings-form" onSubmit={handleSave}>
+        <p className="section-label">USER PROFILE</p>
+        <label htmlFor="displayName">Display Name</label>
+        <input id="displayName" name="displayName" value={formData.displayName} onChange={handleChange} />
 
-      <div style={sectionLabelStyle}>CHANGE PASSWORD</div>
-      <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }}>New Password</label>
-      <input type="password" name="password" value={localProfile.password} onChange={handleChange} style={inputStyle} placeholder="••••••••" />
-      
-      <button onClick={handleSave} style={{ 
-        width: '100%', 
-        padding: '15px', 
-        backgroundColor: '#1a1a1a', 
-        color: '#fff', 
-        border: 'none', 
-        borderRadius: '8px', 
-        marginTop: '30px',
-        fontWeight: 'bold',
-        cursor: 'pointer'
-      }}>
-        Save Changes
-      </button>
-    </div>
+        <p className="section-label">THEME</p>
+        <label htmlFor="theme">Display Mode</label>
+        <select id="theme" name="theme" value={formData.theme} onChange={handleChange}>
+          <option value="light">Sáng</option>
+          <option value="dark">Tối</option>
+        </select>
+
+        <label>PRIMARY COLOR</label>
+        <div className="theme-swatches" role="group" aria-label="Màu chủ đạo">
+          {COLORS.map((color) => (
+            <button
+              className={`swatch${formData.primaryColor === color ? ' swatch--active' : ''}`}
+              key={color}
+              type="button"
+              style={{ backgroundColor: color }}
+              onClick={() => setFormData({ ...formData, primaryColor: color })}
+              aria-label={`Chọn màu ${color}`}
+            />
+          ))}
+        </div>
+
+        <p className="section-label">CHANGE PASSWORD</p>
+        {profile.password && (
+          <>
+            <label htmlFor="currentPassword">Current Password</label>
+            <input id="currentPassword" name="currentPassword" type="password" value={formData.currentPassword} onChange={handleChange} />
+          </>
+        )}
+        <label htmlFor="newPassword">New Password</label>
+        <input id="newPassword" name="newPassword" type="password" value={formData.newPassword} onChange={handleChange} />
+        <label htmlFor="confirmPassword">Confirm New Password</label>
+        <input id="confirmPassword" name="confirmPassword" type="password" value={formData.confirmPassword} onChange={handleChange} />
+
+        {message && <p className={`settings-message${message.includes('thành công') ? '' : ' feedback--error'}`}>{message}</p>}
+        <button className="button button--primary" type="submit" disabled={saving}>
+          {saving ? 'Saving...' : 'Save Changes'}
+        </button>
+      </form>
+    </section>
   );
 }
 
-export default Settings;
+export default function Settings() {
+  const { profile, setProfile, profileLoading } = useContext(AppContext);
+
+  if (profileLoading) {
+    return <section className="page"><header className="page-header"><h1>Settings</h1></header><div className="state-message">Đang tải cài đặt...</div></section>;
+  }
+
+  const formKey = `${profile.displayName}-${profile.theme}-${profile.primaryColor}-${profile.password}`;
+  return <SettingsForm key={formKey} profile={profile} setProfile={setProfile} />;
+}

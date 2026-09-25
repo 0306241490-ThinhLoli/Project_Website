@@ -1,227 +1,201 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { AppContext } from './AppContext';
+import { useContext, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { AppContext } from './AppState';
 
-function PrivateNotes() {
-  const { profile } = useContext(AppContext);
-  const isDark = profile.theme === 'dark';
-  const cardBg = isDark ? '#2a2a2a' : '#fff';
-  const borderColor = isDark ? '#444' : '#eee';
+const API_URL = 'http://localhost:5000/api/private';
+const EMPTY_FORM = { id: null, title: '', content: '' };
 
+export default function PrivateNotes() {
+  const { profile, profileLoading } = useContext(AppContext);
+  const navigate = useNavigate();
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
-  
+  const [authError, setAuthError] = useState('');
+  const [authenticating, setAuthenticating] = useState(false);
   const [notes, setNotes] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({ id: null, title: '', content: '' });
+  const [formData, setFormData] = useState(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
 
-  const handleLogin = () => {
-    fetch('http://localhost:5000/api/private/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: passwordInput })
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.success) {
-        setIsUnlocked(true);
-        fetchPrivateNotes();
-      } else {
-        alert("Sai mật khẩu, vui lòng thử lại!");
-        setPasswordInput('');
-      }
-    })
-    .catch(() => {
-      if(passwordInput === '12345' || passwordInput === '1') {
-        setIsUnlocked(true);
-        fetchPrivateNotes();
-      } else {
-        alert("Sai mật khẩu (Mock), vui lòng thử lại!");
-        setPasswordInput('');
-      }
-    });
-  };
-
-  const fetchPrivateNotes = () => {
-    fetch('http://localhost:5000/api/private/notes')
-      .then(res => res.json())
-      .then(data => setNotes(Array.isArray(data) ? data : []))
-      .catch(() => setNotes([]));
-  };
-
-  const handleSave = () => {
-    const method = formData.id ? 'PUT' : 'POST';
-    const url = formData.id 
-      ? `http://localhost:5000/api/private/notes/${formData.id}`
-      : `http://localhost:5000/api/private/notes`;
-
-    fetch(url, {
-      method: method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: formData.title, content: formData.content })
-    }).then((res) => {
-      if(!res.ok) throw new Error("Mock");
-      fetchPrivateNotes();
-      setShowForm(false);
-      setFormData({ id: null, title: '', content: '' });
-    }).catch(() => {
-        if(method === 'POST') {
-            setNotes([...notes, { id: Date.now().toString(), title: formData.title, content: formData.content }]);
-        } else {
-            setNotes(notes.map(n => n.id === formData.id ? {...n, title: formData.title, content: formData.content} : n));
-        }
-        setShowForm(false);
-        setFormData({ id: null, title: '', content: '' });
-    });
-  };
-
-  const handleDelete = (id) => {
-    if(window.confirm('Bạn có chắc muốn xóa ghi chú bí mật này?')) {
-      fetch(`http://localhost:5000/api/private/notes/${id}`, { method: 'DELETE' })
-        .then((res) => {
-           if(!res.ok) throw new Error("Mock");
-           fetchPrivateNotes();
-        })
-        .catch(() => setNotes(notes.filter(n => n.id !== id)));
+  async function fetchPrivateNotes() {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch(`${API_URL}/notes`);
+      if (!response.ok) throw new Error('Không thể tải ghi chú riêng tư.');
+      const data = await response.json();
+      setNotes(Array.isArray(data) ? data : []);
+    } catch (fetchError) {
+      setNotes([]);
+      setError(fetchError.message);
+    } finally {
+      setLoading(false);
     }
-  };
+  }
 
-  const openEdit = (note) => {
-    setFormData({ id: note.id, title: note.title, content: note.content });
-    setShowForm(true);
-  };
+  async function handleLogin(event) {
+    event.preventDefault();
+    if (!passwordInput) {
+      setAuthError('Vui lòng nhập mật khẩu.');
+      return;
+    }
 
-  useEffect(() => {
-      setIsUnlocked(false);
+    setAuthenticating(true);
+    setAuthError('');
+    try {
+      const response = await fetch(`${API_URL}/auth`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: passwordInput }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.message || 'Sai mật khẩu.');
+
+      setIsUnlocked(true);
       setPasswordInput('');
-  }, []);
+      await fetchPrivateNotes();
+    } catch (loginError) {
+      setPasswordInput('');
+      setAuthError(loginError.message);
+    } finally {
+      setAuthenticating(false);
+    }
+  }
+
+  function closeForm() {
+    setShowForm(false);
+    setFormData(EMPTY_FORM);
+    setError('');
+  }
+
+  function openEdit(note) {
+    setFormData({ id: note.id, title: note.title || '', content: note.content || '' });
+    setShowForm(true);
+    setError('');
+  }
+
+  async function handleSave(event) {
+    event.preventDefault();
+    if (!formData.title.trim()) {
+      setError('Vui lòng nhập tiêu đề ghi chú.');
+      return;
+    }
+
+    const method = formData.id ? 'PUT' : 'POST';
+    const url = formData.id ? `${API_URL}/notes/${formData.id}` : `${API_URL}/notes`;
+    setSaving(true);
+    setError('');
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: formData.title.trim(), content: formData.content.trim() }),
+      });
+      if (!response.ok) throw new Error('Không thể lưu ghi chú riêng tư.');
+      closeForm();
+      await fetchPrivateNotes();
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(note) {
+    if (!window.confirm(`Xóa ghi chú riêng tư "${note.title}"?`)) return;
+    try {
+      const response = await fetch(`${API_URL}/notes/${note.id}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Không thể xóa ghi chú riêng tư.');
+      setNotes((current) => current.filter((item) => item.id !== note.id));
+    } catch (deleteError) {
+      setError(deleteError.message);
+    }
+  }
+
+  if (profileLoading) {
+    return <section className="page"><header className="page-header"><h1>Private Notes</h1></header><div className="state-message">Đang tải cài đặt...</div></section>;
+  }
+
+  if (!profile.password) {
+    return (
+      <section className="page">
+        <header className="page-header"><h1>Private Notes</h1></header>
+        <div className="empty-state">
+          <span aria-hidden="true">◇</span>
+          <h2>Chưa thiết lập mật khẩu</h2>
+          <p>Bạn cần tạo mật khẩu trong Settings trước khi tạo ghi chú riêng tư.</p>
+          <Link className="text-button" to="/settings">Đi đến Settings</Link>
+        </div>
+      </section>
+    );
+  }
 
   if (!isUnlocked) {
     return (
-      <div style={{ padding: '20px', position: 'relative', height: '100vh', backgroundColor: 'transparent' }}>
-        <div style={{ borderBottom: `1px solid ${borderColor}`, marginBottom: '20px', paddingBottom: '15px' }}>
-          <h2 style={{ textAlign: 'center', margin: 0, fontSize: '18px' }}>Private Notes</h2>
-        </div>
-        
-        {/* Fake locked notes */}
-        <div style={{ filter: 'blur(4px)', opacity: 0.5, pointerEvents: 'none' }}>
-          <div style={{ border: `1px solid ${borderColor}`, borderRadius: '12px', padding: '15px', background: cardBg, marginBottom: '15px' }}>
-            <h4 style={{ margin: '0 0 5px 0' }}>Private Diary Entry #1</h4>
-            <p style={{ margin: 0, fontSize: '13px', color: '#888' }}>🔒 Locked Private Content</p>
+      <section className="page">
+        <header className="page-header"><h1>Private Notes</h1></header>
+        <div className="private-backdrop">
+          <div className="locked-preview" aria-hidden="true">
+            <article className="note-card"><h3>Private Diary Entry #1</h3><p className="note-card__content">Locked Private Content</p></article>
+            <article className="note-card"><h3>Secure Cryptokey Passphrase</h3><p className="note-card__content">Locked Private Content</p></article>
           </div>
-          <div style={{ border: `1px solid ${borderColor}`, borderRadius: '12px', padding: '15px', background: cardBg, marginBottom: '15px' }}>
-            <h4 style={{ margin: '0 0 5px 0' }}>Secure Cryptokey Passphrase</h4>
-            <p style={{ margin: 0, fontSize: '13px', color: '#888' }}>🔒 Locked Private Content</p>
-          </div>
-        </div>
-
-        {/* Modal Overlay */}
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div style={{ background: isDark ? '#222' : '#fff', padding: '30px 20px', borderRadius: '16px', width: '100%', maxWidth: '300px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', textAlign: 'center' }}>
-            <div style={{ fontSize: '30px', marginBottom: '10px' }}>🔒</div>
-            <h3 style={{ margin: '0 0 10px 0', fontSize: '16px' }}>Enter Password</h3>
-            <p style={{ fontSize: '12px', color: '#888', marginBottom: '20px' }}>Please enter your master secure password to unlock private notes.</p>
-            
-            <input 
-              type="password" 
-              value={passwordInput} 
-              onChange={(e) => setPasswordInput(e.target.value)} 
-              placeholder="••••••••"
-              style={{ width: '100%', padding: '12px', border: `1px solid ${borderColor}`, borderRadius: '8px', background: isDark ? '#111' : '#f9f9f9', color: isDark ? '#fff' : '#000', marginBottom: '20px', boxSizing: 'border-box', textAlign: 'center', letterSpacing: '2px' }}
-            />
-            
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={handleLogin} style={{ flex: 1, padding: '12px', backgroundColor: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Unlock</button>
-              <button style={{ flex: 1, padding: '12px', backgroundColor: 'transparent', color: isDark ? '#fff' : '#000', border: `1px solid ${borderColor}`, borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Cancel</button>
-            </div>
+          <div className="modal-layer">
+            <form className="modal" onSubmit={handleLogin}>
+              <span aria-hidden="true">♙</span>
+              <h2>Enter Password</h2>
+              <p>Please enter your secure password to unlock private notes.</p>
+              <input type="password" value={passwordInput} onChange={(event) => setPasswordInput(event.target.value)} placeholder="••••••••" autoFocus />
+              {authError && <p className="feedback feedback--error">{authError}</p>}
+              <div className="form-actions">
+                <button className="button button--primary" type="submit" disabled={authenticating}>{authenticating ? 'Checking...' : 'Unlock'}</button>
+                <button className="button button--secondary" type="button" onClick={() => navigate('/')}>Cancel</button>
+              </div>
+            </form>
           </div>
         </div>
-      </div>
+      </section>
     );
   }
 
   if (showForm) {
     return (
-      <div style={{ padding: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '30px' }}>
-          <button onClick={() => { setShowForm(false); setFormData({ id: null, title: '', content: '' }); }} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: isDark ? '#fff' : '#000' }}>←</button>
-          <h2 style={{ margin: '0 auto', fontSize: '18px' }}>{formData.id ? 'Edit Private Note' : 'New Private Note'}</h2>
-          <div style={{ width: '20px' }}></div>
-        </div>
-
-        <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#888', marginBottom: '8px' }}>NOTE TITLE</div>
-        <input 
-          placeholder="Enter title..." value={formData.title} 
-          onChange={e => setFormData({...formData, title: e.target.value})} 
-          style={{ width: '100%', padding: '12px', border: `1px solid ${borderColor}`, borderRadius: '8px', background: cardBg, color: isDark ? '#fff' : '#000', marginBottom: '20px', boxSizing: 'border-box' }}
-        />
-
-        <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#888', marginBottom: '8px' }}>CONTENT</div>
-        <textarea 
-          placeholder="Start typing secret..." value={formData.content} 
-          onChange={e => setFormData({...formData, content: e.target.value})} 
-          style={{ width: '100%', padding: '12px', border: `1px solid ${borderColor}`, borderRadius: '8px', background: cardBg, color: isDark ? '#fff' : '#000', height: '200px', resize: 'none', marginBottom: '20px', boxSizing: 'border-box' }}
-        />
-
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={handleSave} style={{ flex: 1, padding: '15px', backgroundColor: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Save</button>
-          <button onClick={() => { setShowForm(false); setFormData({ id: null, title: '', content: '' }); }} style={{ flex: 1, padding: '15px', backgroundColor: 'transparent', color: isDark ? '#fff' : '#000', border: `1px solid ${borderColor}`, borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Cancel</button>
-        </div>
-      </div>
+      <section className="page">
+        <header className="page-header page-header--form"><button className="back-button" onClick={closeForm}>←</button><h1>{formData.id ? 'Edit Private Note' : 'New Private Note'}</h1></header>
+        <form className="note-form" onSubmit={handleSave}>
+          <label htmlFor="private-title">NOTE TITLE</label>
+          <input id="private-title" value={formData.title} onChange={(event) => setFormData({ ...formData, title: event.target.value })} placeholder="Enter title..." />
+          <label htmlFor="private-content">CONTENT</label>
+          <textarea id="private-content" value={formData.content} onChange={(event) => setFormData({ ...formData, content: event.target.value })} placeholder="Start typing secret..." />
+          {error && <p className="feedback feedback--error">{error}</p>}
+          <div className="form-actions">
+            <button className="button button--primary" type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save'}</button>
+            <button className="button button--secondary" type="button" onClick={closeForm}>Cancel</button>
+          </div>
+        </form>
+      </section>
     );
   }
 
   return (
-    <div style={{ padding: '20px', backgroundColor: 'transparent' }}>
-      <div style={{ borderBottom: `1px solid ${borderColor}`, marginBottom: '20px', paddingBottom: '15px' }}>
-        <h2 style={{ textAlign: 'center', margin: 0, fontSize: '18px' }}>Private Notes</h2>
-      </div>
-      
-      {/* Unlocked Session Banner */}
-      <div style={{ display: 'flex', alignItems: 'center', padding: '10px', background: isDark ? '#332b00' : '#fff9e6', border: `1px solid ${isDark ? '#554700' : '#ffeeba'}`, borderRadius: '8px', marginBottom: '20px', fontSize: '12px', color: isDark ? '#ffdb4d' : '#856404' }}>
-        <span style={{ marginRight: '8px', fontSize: '14px' }}>🔓</span>
-        Unlocked Session
-      </div>
-
-      {/* Danh sách */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-        {notes.length === 0 && <p style={{ textAlign: 'center', color: '#888', marginTop: '40px' }}>No private notes found.</p>}
-        {notes.map(note => (
-          <div key={note.id} style={{ border: `1px solid ${borderColor}`, borderRadius: '12px', padding: '15px', background: cardBg, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <h4 style={{ margin: '0 0 5px 0', fontSize: '15px' }}>{note.title}</h4>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={() => openEdit(note)} style={{ background: 'none', border: `1px solid ${borderColor}`, borderRadius: '4px', padding: '4px', cursor: 'pointer', color: isDark ? '#aaa' : '#555' }}>✎</button>
-                <button onClick={() => handleDelete(note.id)} style={{ background: 'none', border: `1px solid ${borderColor}`, borderRadius: '4px', padding: '4px', cursor: 'pointer', color: isDark ? '#aaa' : '#555' }}>🗑</button>
-              </div>
-            </div>
-            <p style={{ margin: 0, fontSize: '13px', color: '#888', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{note.content}</p>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ position: 'fixed', bottom: '80px', left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '500px', pointerEvents: 'none', zIndex: 100 }}>
-        <button 
-          onClick={() => setShowForm(true)}
-          style={{
-            position: 'absolute',
-            right: '20px',
-            bottom: '0',
-            width: '56px',
-            height: '56px',
-            borderRadius: '50%',
-            backgroundColor: '#1a1a1a',
-            color: '#fff',
-            border: 'none',
-            fontSize: '24px',
-            boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
-            cursor: 'pointer',
-            pointerEvents: 'auto'
-          }}>
-          +
-        </button>
-      </div>
-    </div>
+    <section className="page">
+      <header className="page-header"><h1>Private Notes</h1></header>
+      <div className="unlock-banner">◇ Unlocked Session</div>
+      {loading && <div className="state-message">Đang tải ghi chú...</div>}
+      {!loading && error && <div className="state-message state-message--error">{error}</div>}
+      {!loading && !error && notes.length === 0 && <div className="empty-state"><span>▱</span><h2>Chưa có ghi chú riêng tư</h2><p>Nhấn nút + để tạo ghi chú đầu tiên.</p></div>}
+      {!loading && !error && notes.length > 0 && (
+        <div className="note-list">
+          {notes.map((note) => (
+            <article className="note-card" key={note.id}>
+              <div className="note-card__header"><h3>{note.title}</h3><div className="note-actions"><button className="icon-button" onClick={() => openEdit(note)}>✎</button><button className="icon-button" onClick={() => handleDelete(note)}>□</button></div></div>
+              <p className="note-card__content">{note.content || 'Không có nội dung.'}</p>
+            </article>
+          ))}
+        </div>
+      )}
+      <button className="fab" onClick={() => setShowForm(true)} aria-label="Tạo ghi chú riêng tư">+</button>
+    </section>
   );
 }
-
-export default PrivateNotes;
