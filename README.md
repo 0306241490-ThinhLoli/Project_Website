@@ -1,7 +1,7 @@
 # Project_Website
 # ĐỒ ÁN MÔN HỌC: ỨNG DỤNG QUẢN LÝ GHI CHÚ (REACTJS & NODEJS)
-**Giảng viên hướng dẫn:** [Tên giảng viên]
-**Nhóm thực hiện:** Nhóm [Số nhóm]
+**Giảng viên hướng dẫn:** Lữ Cao Tiến
+**Nhóm thực hiện:** Nhóm 07
 **Thành viên:**
 1. Hà Hữu Thịnh - 0306241490 -Vai trò: PM & QA
 2. Lê Đức Phong - 0306241471 - Vai trò: Frontend Developer
