@@ -1,18 +1,42 @@
-import React, { createContext, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { AppContext } from './AppState';
 
-export const AppContext = createContext();
+const DEFAULT_PROFILE = {
+  displayName: '',
+  theme: 'light',
+  primaryColor: '#111827',
+  password: '',
+};
 
-export const AppProvider = ({ children }) => {
-  // Tạo AppContext (Context API) để lưu trạng thái toàn cục: displayName và theme ('light' / 'dark').
-  const [profile, setProfile] = useState({
-    displayName: '',
-    theme: 'light',
-    password: ''
-  });
+export function AppProvider({ children }) {
+  const [profile, setProfile] = useState(DEFAULT_PROFILE);
+  const [profileLoading, setProfileLoading] = useState(true);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadProfile() {
+      try {
+        const response = await fetch('http://localhost:5000/api/profile', {
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error('Không thể tải thông tin cài đặt.');
+        const data = await response.json();
+        setProfile({ ...DEFAULT_PROFILE, ...data });
+      } catch (error) {
+        if (error.name !== 'AbortError') setProfile(DEFAULT_PROFILE);
+      } finally {
+        if (!controller.signal.aborted) setProfileLoading(false);
+      }
+    }
+
+    loadProfile();
+    return () => controller.abort();
+  }, []);
 
   return (
-    <AppContext.Provider value={{ profile, setProfile }}>
+    <AppContext.Provider value={{ profile, setProfile, profileLoading }}>
       {children}
     </AppContext.Provider>
   );
-};
+}

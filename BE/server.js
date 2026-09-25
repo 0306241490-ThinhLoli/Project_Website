@@ -17,14 +17,14 @@ app.get('/api/profile', (req,res) =>
     {try {
         const rawData = fs.readFileSync(profilePath,'utf-8');
         const profile = JSON.parse(rawData);
-
-    } catch (profile) {
+        res.json(profile)
+    } catch (error) {
         res.status(500).json({message: "Lỗi đọc file"});
     }
     }
 )
 // API - Cập nhật profile
-app.put('api/profile', (req,res) => {
+app.put('/api/profile', (req,res) => {
     try{
         const newProfile = req.body;
         // Ghi đè dữ liệu mới
@@ -56,7 +56,7 @@ if (!fs.existsSync(notesDir))
 }
 const getFilePath = (topic) => path.join(notesDir, `${topic}.json`);
 // GET - Lấy danh sách ghi chú
-app.get('/api/notes/:topic'),(req,res) => {
+app.get('/api/notes/:topic',(req,res) => {
     const filePath = getFilePath(req.params.topic);
     try{
         if(!fs.existsSync(filePath)) return res.json([]);
@@ -66,7 +66,7 @@ app.get('/api/notes/:topic'),(req,res) => {
     {
         res.status(500).json({message: "Lỗi đọc danh sách ghi chú"});
     }
-}
+});
 // POST - Thêm mới ghi chú
 app.post('/api/notes/:topic',(req,res) => {
     const filePath = getFilePath(req.params.topic);
