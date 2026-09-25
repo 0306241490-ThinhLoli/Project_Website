@@ -36,7 +36,7 @@ app.put('/api/profile', (req,res) => {
     }
 });
 
-const PORT = 5000;
+const PORT = 3000;
 app.listen(PORT)
 
 // MODULE: Quản lý ghi chú bình thường (public note)
